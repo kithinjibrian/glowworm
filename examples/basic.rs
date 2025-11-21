@@ -1,12 +1,6 @@
-use glowworm::array;
+use glowworm::{Array, array};
 
 fn main() {
-    let a = array![1, 2, 3];
+    let a = Array::<u64>::zeros(vec![3, 2, 1]);
     println!("{:?}", a);
-
-    let b = array![[1, 2], [3, 4]];
-    println!("{:?}", b);
-
-    let c = array![[[1, 2], [3, 4]], [[5, 6], [7, 8]]];
-    println!("{:?}", c);
 }
