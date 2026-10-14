@@ -1,0 +1,14 @@
+// An n-dimensional array of f64, stored flat in row-major order.
+public struct NdArray { public shape: i64[], public data: f64[] }
+
+// The number of elements a shape holds.
+public fun size(shape: i64[]): i64 {
+    let mut n = 1;
+    for d of shape {
+        n *= d;
+    }
+    n
+}
+
+// An array of `shape` filled with zeros.
+public fun zeros(shape: i64[]): NdArray = NdArray { shape: shape, data: [0.0; size(shape)] };
