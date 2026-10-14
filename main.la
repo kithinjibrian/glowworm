@@ -1,8 +1,0 @@
-fun add<T: Num>(a: T, b: T): T = a + b;
-
-fun main() {
-    let a = 5;
-    let b = 10;
-
-    println("{a} + {b} = {add(a, b)}");
-}

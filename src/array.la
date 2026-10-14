@@ -1,6 +1,12 @@
-// An n-dimensional array of numbers, stored flat in row-major order.
-// `+ - * /` work element-wise on two arrays of the same shape, and `-a`
-// negates every element; `a.scale(k)` multiplies by a number.
+// An n-dimensional array, stored flat in row-major order.
+//
+// - Printing:   println(a) shows `array([[1.0, 2.0], [3.0, 4.0]])`.
+// - Arithmetic: `+ - * /` element-wise on equal shapes, `-a`, `a.scale(k)`.
+// - Shapes:     `reshape`, `flatten`, `transpose` (2-D), `ndim`, `get`/`set`.
+// - Reductions: `sum`, `prod`, `min`, `max`, `argmax`, `mean` (floats).
+// - Math:       `map(f)`, and `sqrt`, `exp`, `abs` element-wise.
+import std.math;
+
 public struct NdArray<T> { public shape: i64[], public data: T[] }
 
 // The number of elements a shape holds.
@@ -12,24 +18,156 @@ public fun size(shape: i64[]): i64 {
     n
 }
 
+// How far apart, in `data`, neighbours along each axis are.
+fun strides(shape: i64[]): i64[] {
+    let mut out = [1; shape.len];
+    let mut k = shape.len - 1;
+    while k > 0 {
+        out[k - 1] = out[k] * shape[k];
+        k -= 1;
+    }
+    out
+}
+
+// ---- Making arrays ----------------------------------------------------
+
 // An array of `shape` holding `data`; panics unless the sizes agree.
-public fun from<T: Num>(shape: i64[], data: T[]): NdArray<T> {
+public fun from<T>(shape: i64[], data: T[]): NdArray<T> {
     if size(shape) != data.len {
         panic("{data.len} values don't fill shape {shape}");
     }
     NdArray { shape: shape, data: data }
 }
 
-// An array of `shape` filled with zeros, or with ones.
+// An array of `shape` with every element `value`.
+public fun full<T>(shape: i64[], value: T): NdArray<T> =
+    NdArray { shape: shape, data: [value; size(shape)] };
+
 public fun zeros<T: Num>(shape: i64[]): NdArray<T> {
     let zero: T = 0;
-    NdArray { shape: shape, data: [zero; size(shape)] }
+    full(shape, zero)
 }
 
 public fun ones<T: Num>(shape: i64[]): NdArray<T> {
     let one: T = 1;
-    NdArray { shape: shape, data: [one; size(shape)] }
+    full(shape, one)
 }
+
+// 0, 1, …, n - 1.
+public fun arange<T: Num>(n: i64): NdArray<T> {
+    let one: T = 1;
+    let mut v: T = 0;
+    let mut data: T[] = [];
+    for i in 0..n {
+        data.push(v);
+        v += one;
+    }
+    NdArray { shape: [n], data: data }
+}
+
+// `n` evenly spaced values from `start` to `stop`, both included.
+public fun linspace<T: Float>(start: T, stop: T, n: i64): NdArray<T> {
+    if n < 2 {
+        return full([n], start);
+    }
+    let one: T = 1;
+    let mut steps: T = 0;
+    for i in 1..n {
+        steps += one;
+    }
+    let step = (stop - start) / steps;
+    let mut data: T[] = [];
+    let mut v = start;
+    for i in 0..n {
+        data.push(v);
+        v += step;
+    }
+    data[n - 1] = stop;
+    NdArray { shape: [n], data: data }
+}
+
+// ---- Any element type: printing, shapes, indexing, map ----------------
+
+impl NdArray<T> {
+    // NumPy's form: `array([[1, 2], [3, 4]])`.
+    public fun show(self): string = "array({self.nested(0, 0)})";
+
+    // The elements of axis `axis` starting at flat offset `at`, bracketed.
+    fun nested(self, axis: i64, at: i64): string {
+        if self.shape.len == 0 {
+            return "{self.data[0]}";
+        }
+        let step = strides(self.shape)[axis];
+        let mut parts: string[] = [];
+        for i in 0..self.shape[axis] {
+            let start = at + i * step;
+            if axis == self.shape.len - 1 {
+                parts.push("{self.data[start]}");
+            } else {
+                parts.push(self.nested(axis + 1, start));
+            }
+        }
+        "[{parts.join(", ")}]"
+    }
+
+    // The number of axes.
+    public fun ndim(self): i64 = self.shape.len;
+
+    // The number of elements.
+    public fun count(self): i64 = self.data.len;
+
+    // The element at `index`, one position per axis.
+    public fun get(self, index: i64[]): T = self.data[self.offset(index)];
+
+    // Sets the element at `index`.
+    public fun set(mut self, index: i64[], value: T) {
+        let at = self.offset(index);
+        self.data[at] = value;
+    }
+
+    // Where `index` is in `data`; panics if it doesn't fit the shape.
+    fun offset(self, index: i64[]): i64 {
+        if index.len != self.shape.len {
+            panic("index {index} has {index.len} positions for {self.shape.len} axes");
+        }
+        let st = strides(self.shape);
+        let mut at = 0;
+        for k in 0..index.len {
+            if index[k] < 0 || index[k] >= self.shape[k] {
+                panic("index {index} is outside shape {self.shape}");
+            }
+            at += index[k] * st[k];
+        }
+        at
+    }
+
+    // The same elements in another shape; panics if the sizes differ.
+    public fun reshape(self, shape: i64[]): NdArray<T> = from(shape, self.data);
+
+    // The elements as one axis.
+    public fun flatten(self): NdArray<T> = NdArray { shape: [self.data.len], data: self.data };
+
+    // Rows and columns swapped; 2-D arrays only.
+    public fun transpose(self): NdArray<T> {
+        if self.shape.len != 2 {
+            panic("transpose needs a 2-D array, not shape {self.shape}");
+        }
+        let (rows, cols) = (self.shape[0], self.shape[1]);
+        let mut data: T[] = [];
+        for c in 0..cols {
+            for r in 0..rows {
+                data.push(self.data[r * cols + c]);
+            }
+        }
+        NdArray { shape: [cols, rows], data: data }
+    }
+
+    // `f` applied to every element.
+    public fun map<U>(self, f: fun(T): U): NdArray<U> =
+        NdArray { shape: self.shape, data: self.data.map(f) };
+}
+
+// ---- Numbers: arithmetic and reductions -------------------------------
 
 impl NdArray<T: Num> {
     public fun add(self, o: NdArray<T>): NdArray<T> {
@@ -85,7 +223,15 @@ impl NdArray<T: Num> {
         out
     }
 
-    // The sum of every element.
+    // Every element's absolute value.
+    public fun abs(self): NdArray<T> {
+        let mut out = self;
+        for i in 0..self.data.len {
+            out.data[i] = math.abs(self.data[i]);
+        }
+        out
+    }
+
     public fun sum(self): T {
         let mut s: T = 0;
         for x of self.data {
@@ -94,10 +240,68 @@ impl NdArray<T: Num> {
         s
     }
 
+    public fun prod(self): T {
+        let mut p: T = 1;
+        for x of self.data {
+            p *= x;
+        }
+        p
+    }
+
+    // The smallest and largest elements; panic on an empty array.
+    public fun min(self): T = self.data[self.argmin()];
+    public fun max(self): T = self.data[self.argmax()];
+
+    // The flat index of the smallest / largest element (the first, on ties).
+    public fun argmin(self): i64 {
+        self.non_empty("argmin");
+        let mut best = 0;
+        for i in 1..self.data.len {
+            if self.data[i] < self.data[best] {
+                best = i;
+            }
+        }
+        best
+    }
+
+    public fun argmax(self): i64 {
+        self.non_empty("argmax");
+        let mut best = 0;
+        for i in 1..self.data.len {
+            if self.data[i] > self.data[best] {
+                best = i;
+            }
+        }
+        best
+    }
+
+    fun non_empty(self, what: string) {
+        if self.data.len == 0 {
+            panic("{what} of an empty array");
+        }
+    }
+
     // Panics unless `o` has this array's shape.
     fun same_shape(self, o: NdArray<T>, op: string) {
         if self.shape != o.shape {
             panic("shapes {self.shape} and {o.shape} don't match for `{op}`");
         }
     }
+}
+
+// ---- Floats: mean and element-wise math -------------------------------
+
+impl NdArray<T: Float> {
+    // The average element; NaN for an empty array.
+    public fun mean(self): T {
+        let one: T = 1;
+        let mut n: T = 0;
+        for x of self.data {
+            n += one;
+        }
+        self.sum() / n
+    }
+
+    public fun sqrt(self): NdArray<T> = self.map(fun(x: T): T = math.sqrt(x));
+    public fun exp(self): NdArray<T> = self.map(fun(x: T): T = math.exp(x));
 }

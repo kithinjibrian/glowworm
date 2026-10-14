@@ -1,16 +1,23 @@
-// Trying glowworm the way a user would: `lughac run example/main.la`.
 import glowworm.array;
 
 fun main() {
     let a = array.from([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     let b: array.NdArray<f64> = array.ones([2, 3]);
-    println((a + b).data);
-    println((a - b).data);
-    println((a * a).data);
-    println((-a / b.scale(2.0)).data);
+    println(a);
+    println(a + b);
+    println(a.transpose());
+    println(a.reshape([3, 2]).flatten());
+    println("a[1, 2] = {a.get([1, 2])}, ndim {a.ndim()}");
+
     let mut c = a;
-    c += b;
-    println("sum {c.sum()}, shape {c.shape}");
-    let n = array.from([3], [1, 2, 3]);
-    println((n * n).sum());
+    c.set([0, 0], 10.0);
+    println("sum {c.sum()}, mean {c.mean()}, max {c.max()} at {c.argmax()}");
+    println(c.sqrt());
+
+    let n: array.NdArray<i64> = array.arange(6);
+    println(n.reshape([2, 3]));
+    println("prod of 1..5 = {array.from([5], [1, 2, 3, 4, 5]).prod()}");
+    println(array.linspace(0.0, 1.0, 5));
+    println(n.map(fun(x: i64): string = "#{x}"));
+    println(-n.abs());
 }
