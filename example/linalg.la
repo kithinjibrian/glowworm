@@ -1,0 +1,29 @@
+import glowworm.array;
+import glowworm.linalg;
+
+fun main() {
+    let a = array.from([2, 2], [4.0, 7.0, 2.0, 6.0]);
+    let v = array.from([2], [1.0, 2.0]);
+
+    println(linalg.matmul(a, v));
+    println(linalg.matmul(a, a));
+    println(linalg.dot(v, v));
+    println(linalg.outer(v, v));
+    println(linalg.trace(a));
+    println(linalg.det(a));
+
+    let ai = linalg.inv(a);
+    println(ai);
+    println(linalg.matmul(a, ai));
+
+    let x = linalg.solve(a, array.from([2], [18.0, 14.0]));
+    println(x);
+    println(linalg.norm(array.from([2], [3.0, 4.0])));
+
+    let i3: array.NdArray<i64> = linalg.identity(3);
+    println(i3);
+    let m = array.from([3, 3], [2.0, 0.0, 1.0, 1.0, 3.0, 2.0, 1.0, 1.0, 2.0]);
+    println(linalg.det(m));
+    println(linalg.matmul(m, linalg.inv(m)));
+    println(linalg.det(array.from([2, 2], [1.0, 2.0, 2.0, 4.0])));
+}

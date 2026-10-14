@@ -2,7 +2,8 @@
 //
 // - Printing:   println(a) shows `array([[1.0, 2.0], [3.0, 4.0]])`.
 // - Arithmetic: `+ - * /` element-wise on equal shapes, `-a`, `a.scale(k)`.
-// - Shapes:     `reshape`, `flatten`, `transpose` (2-D), `ndim`, `get`/`set`.
+// - Shapes:     `reshape`, `flatten`, `transpose` (2-D), `ndim`, `get`/`set`,
+//               `swap_rows` (in place).
 // - Reductions: `sum`, `prod`, `min`, `max`, `argmax`, `mean` (floats).
 // - Math:       `map(f)`, and `sqrt`, `exp`, `abs` element-wise.
 import std.math;
@@ -139,6 +140,26 @@ impl NdArray<T> {
             at += index[k] * st[k];
         }
         at
+    }
+
+    // Swaps rows `a` and `b` in place: the first axis's entries, each
+    // `count() / shape[0]` elements wide (a vector's rows are single
+    // elements). Panics for a row outside the array.
+    public fun swap_rows(mut self, a: i64, b: i64) {
+        if self.shape.len == 0 {
+            panic("swap_rows needs at least one axis");
+        }
+        let rows = self.shape[0];
+        if a < 0 || a >= rows || b < 0 || b >= rows {
+            panic("rows {a} and {b} aren't both in 0..{rows}");
+        }
+        if a == b {
+            return;
+        }
+        let width = self.data.len / rows;
+        for c in 0..width {
+            swap(self.data[a * width + c], self.data[b * width + c]);
+        }
     }
 
     // The same elements in another shape; panics if the sizes differ.

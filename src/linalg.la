@@ -1,0 +1,183 @@
+// Linear algebra on NdArray: `import glowworm.linalg;`.
+//
+// - Products:  `dot` (vectors), `matmul` (matrix · matrix, matrix · vector), `outer`.
+// - Matrices:  `identity`, `trace`, and for floats `det`, `inv`, `solve`, `norm`.
+//
+// Shapes are checked: a mismatch panics with the shapes involved. `det`,
+// `inv` and `solve` use Gaussian elimination with partial pivoting; a
+// singular matrix gives `det` 0 and makes `inv` and `solve` panic.
+import array;
+import std.math;
+
+// The n × n identity matrix.
+public fun identity<T: Num>(n: i64): array.NdArray<T> {
+    let mut m: array.NdArray<T> = array.zeros([n, n]);
+    let one: T = 1;
+    for i in 0..n {
+        m.data[i * n + i] = one;
+    }
+    m
+}
+
+// The sum of `a[i] * b[i]` for two vectors of one length.
+public fun dot<T: Num>(a: array.NdArray<T>, b: array.NdArray<T>): T {
+    if a.shape.len != 1 || a.shape != b.shape {
+        panic("dot needs two vectors of one length, not shapes {a.shape} and {b.shape}");
+    }
+    let mut s: T = 0;
+    for i in 0..a.data.len {
+        s += a.data[i] * b.data[i];
+    }
+    s
+}
+
+// The matrix product: (m × k) · (k × n) is m × n, and (m × k) · (k) is (m).
+public fun matmul<T: Num>(a: array.NdArray<T>, b: array.NdArray<T>): array.NdArray<T> {
+    let fits = a.shape.len == 2 && b.shape.len >= 1 && b.shape.len <= 2 && a.shape[1] == b.shape[0];
+    if !fits {
+        panic("matmul can't multiply shapes {a.shape} and {b.shape}");
+    }
+    let (m, k) = (a.shape[0], a.shape[1]);
+    let n = if b.shape.len == 2 { b.shape[1] } else { 1 };
+    let mut data: T[] = [];
+    for i in 0..m {
+        for j in 0..n {
+            let mut s: T = 0;
+            for p in 0..k {
+                s += a.data[i * k + p] * b.data[p * n + j];
+            }
+            data.push(s);
+        }
+    }
+    let shape = if b.shape.len == 2 { [m, n] } else { [m] };
+    array.from(shape, data)
+}
+
+// The matrix of every `a[i] * b[j]`, for two vectors.
+public fun outer<T: Num>(a: array.NdArray<T>, b: array.NdArray<T>): array.NdArray<T> {
+    if a.shape.len != 1 || b.shape.len != 1 {
+        panic("outer needs two vectors, not shapes {a.shape} and {b.shape}");
+    }
+    let mut data: T[] = [];
+    for x of a.data {
+        for y of b.data {
+            data.push(x * y);
+        }
+    }
+    array.from([a.data.len, b.data.len], data)
+}
+
+// The sum of the diagonal of a square matrix.
+public fun trace<T: Num>(a: array.NdArray<T>): T {
+    let n = square(a, "trace");
+    let mut s: T = 0;
+    for i in 0..n {
+        s += a.data[i * n + i];
+    }
+    s
+}
+
+// The Euclidean length of a vector, or the Frobenius norm of a matrix.
+public fun norm<T: Float>(a: array.NdArray<T>): T {
+    let mut s: T = 0;
+    for x of a.data {
+        s += x * x;
+    }
+    math.sqrt(s)
+}
+
+// The determinant of a square matrix.
+public fun det<T: Float>(a: array.NdArray<T>): T {
+    let n = square(a, "det");
+    let mut m = a;
+    let mut d: T = 1;
+    for col in 0..n {
+        let Some(p) = pivot(m, col, n) else {
+            return 0;
+        };
+        if p != col {
+            m.swap_rows(p, col);
+            d = -d;
+        }
+        let head = m.data[col * n + col];
+        d *= head;
+        for r in (col + 1)..n {
+            let f = m.data[r * n + col] / head;
+            for c in col..n {
+                m.data[r * n + c] -= f * m.data[col * n + c];
+            }
+        }
+    }
+    d
+}
+
+// The inverse of a square matrix; panics if it is singular.
+public fun inv<T: Float>(a: array.NdArray<T>): array.NdArray<T> {
+    let n = square(a, "inv");
+    eliminate(a, identity(n), n, n, "inv")
+}
+
+// `x` with `a · x = b`, for a square `a` and a vector `b`; panics if `a`
+// is singular.
+public fun solve<T: Float>(a: array.NdArray<T>, b: array.NdArray<T>): array.NdArray<T> {
+    let n = square(a, "solve");
+    if b.shape != [n] {
+        panic("solve needs a vector of length {n}, not shape {b.shape}");
+    }
+    eliminate(a, b, n, 1, "solve")
+}
+
+// Gauss–Jordan elimination: reduces `a` (n × n) to the identity, doing the
+// same row operations on `b` (n × width), and returns what `b` becomes:
+// the answer. Both are local copies; rows swap in place (`swap_rows`).
+fun eliminate<T: Float>(a: array.NdArray<T>, b: array.NdArray<T>, n: i64, width: i64, what: string): array.NdArray<T> {
+    let mut m = a;
+    let mut rhs = b;
+    for col in 0..n {
+        let Some(p) = pivot(m, col, n) else {
+            panic("{what}: the matrix is singular");
+        };
+        m.swap_rows(p, col);
+        rhs.swap_rows(p, col);
+        let head = m.data[col * n + col];
+        for c in 0..n {
+            m.data[col * n + c] /= head;
+        }
+        for c in 0..width {
+            rhs.data[col * width + c] /= head;
+        }
+        for r in 0..n {
+            let f = m.data[r * n + col];
+            if r == col || f == 0 {
+                continue;
+            }
+            for c in 0..n {
+                m.data[r * n + c] -= f * m.data[col * n + c];
+            }
+            for c in 0..width {
+                rhs.data[r * width + c] -= f * rhs.data[col * width + c];
+            }
+        }
+    }
+    rhs
+}
+
+// The row at or below `col` with the largest entry in column `col`, or
+// `None` when the column is all zeros there (the matrix is singular).
+fun pivot<T: Float>(m: array.NdArray<T>, col: i64, n: i64): Option<i64> {
+    let mut best = col;
+    for r in (col + 1)..n {
+        if math.abs(m.data[r * n + col]) > math.abs(m.data[best * n + col]) {
+            best = r;
+        }
+    }
+    if m.data[best * n + col] == 0 { None } else { Some(best) }
+}
+
+// The size of a square matrix; panics for any other shape.
+fun square<T>(a: array.NdArray<T>, what: string): i64 {
+    if a.shape.len != 2 || a.shape[0] != a.shape[1] {
+        panic("{what} needs a square matrix, not shape {a.shape}");
+    }
+    a.shape[0]
+}
