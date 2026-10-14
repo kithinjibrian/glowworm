@@ -1,5 +1,7 @@
-// An n-dimensional array of f64, stored flat in row-major order.
-public struct NdArray { public shape: i64[], public data: f64[] }
+// An n-dimensional array of numbers, stored flat in row-major order.
+// `+ - * /` work element-wise on two arrays of the same shape, and `-a`
+// negates every element; `a.scale(k)` multiplies by a number.
+public struct NdArray<T> { public shape: i64[], public data: T[] }
 
 // The number of elements a shape holds.
 public fun size(shape: i64[]): i64 {
@@ -10,5 +12,92 @@ public fun size(shape: i64[]): i64 {
     n
 }
 
-// An array of `shape` filled with zeros.
-public fun zeros(shape: i64[]): NdArray = NdArray { shape: shape, data: [0.0; size(shape)] };
+// An array of `shape` holding `data`; panics unless the sizes agree.
+public fun from<T: Num>(shape: i64[], data: T[]): NdArray<T> {
+    if size(shape) != data.len {
+        panic("{data.len} values don't fill shape {shape}");
+    }
+    NdArray { shape: shape, data: data }
+}
+
+// An array of `shape` filled with zeros, or with ones.
+public fun zeros<T: Num>(shape: i64[]): NdArray<T> {
+    let zero: T = 0;
+    NdArray { shape: shape, data: [zero; size(shape)] }
+}
+
+public fun ones<T: Num>(shape: i64[]): NdArray<T> {
+    let one: T = 1;
+    NdArray { shape: shape, data: [one; size(shape)] }
+}
+
+impl NdArray<T: Num> {
+    public fun add(self, o: NdArray<T>): NdArray<T> {
+        self.same_shape(o, "+");
+        let mut out = self;
+        for i in 0..self.data.len {
+            out.data[i] = self.data[i] + o.data[i];
+        }
+        out
+    }
+
+    public fun sub(self, o: NdArray<T>): NdArray<T> {
+        self.same_shape(o, "-");
+        let mut out = self;
+        for i in 0..self.data.len {
+            out.data[i] = self.data[i] - o.data[i];
+        }
+        out
+    }
+
+    public fun mul(self, o: NdArray<T>): NdArray<T> {
+        self.same_shape(o, "*");
+        let mut out = self;
+        for i in 0..self.data.len {
+            out.data[i] = self.data[i] * o.data[i];
+        }
+        out
+    }
+
+    public fun div(self, o: NdArray<T>): NdArray<T> {
+        self.same_shape(o, "/");
+        let mut out = self;
+        for i in 0..self.data.len {
+            out.data[i] = self.data[i] / o.data[i];
+        }
+        out
+    }
+
+    public fun neg(self): NdArray<T> {
+        let mut out = self;
+        for i in 0..self.data.len {
+            out.data[i] = -self.data[i];
+        }
+        out
+    }
+
+    // Every element times `k`.
+    public fun scale(self, k: T): NdArray<T> {
+        let mut out = self;
+        for i in 0..self.data.len {
+            out.data[i] = self.data[i] * k;
+        }
+        out
+    }
+
+    // The sum of every element.
+    public fun sum(self): T {
+        let mut s: T = 0;
+        for x of self.data {
+            s += x;
+        }
+        s
+    }
+
+    // Panics unless `o` has this array's shape.
+    fun same_shape(self, o: NdArray<T>, op: string) {
+        if self.shape != o.shape {
+            panic("shapes {self.shape} and {o.shape} don't match for `{op}`");
+        }
+    }
+}

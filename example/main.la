@@ -2,6 +2,15 @@
 import glowworm.array;
 
 fun main() {
-    let a = array.zeros([2, 3]);
-    println("shape {a.shape}, {a.data.len} elements");
+    let a = array.from([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    let b: array.NdArray<f64> = array.ones([2, 3]);
+    println((a + b).data);
+    println((a - b).data);
+    println((a * a).data);
+    println((-a / b.scale(2.0)).data);
+    let mut c = a;
+    c += b;
+    println("sum {c.sum()}, shape {c.shape}");
+    let n = array.from([3], [1, 2, 3]);
+    println((n * n).sum());
 }

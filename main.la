@@ -1,4 +1,4 @@
-fun add<T>(a: T, b: T): T = a + b;
+fun add<T: Num>(a: T, b: T): T = a + b;
 
 fun main() {
     let a = 5;
