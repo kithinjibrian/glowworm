@@ -1,0 +1,7 @@
+// Trying glowworm the way a user would: `lughac run example/main.la`.
+import glowworm.array;
+
+fun main() {
+    let a = array.zeros([2, 3]);
+    println("shape {a.shape}, {a.data.len} elements");
+}
